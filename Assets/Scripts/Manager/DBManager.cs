@@ -1,5 +1,6 @@
 using SQLite4Unity3d;
 using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 
 public class DBManager : MonoBehaviour
@@ -31,6 +32,12 @@ public class DBManager : MonoBehaviour
         string dbPath = Application.persistentDataPath + "/GameData.db";
         dbConnection = new SQLiteConnection(dbPath, SQLiteOpenFlags.ReadWrite | SQLiteOpenFlags.Create);
         CreateAllTables();
+          // 仅当表中无数据时，插入初始耕地（避免重复）
+    if (dbConnection.Table<FarmlandTiles>().Count() == 0)
+    {
+        InsertFarmlandTile(2, 3, true);
+        Debug.Log("已插入初始耕地数据");
+    }
     }
     void Start()
     {
@@ -48,4 +55,58 @@ public class DBManager : MonoBehaviour
         dbConnection.CreateTable<SaveBackups>();
         dbConnection.CreateTable<YarnDislogueVars>();
     }
+    public void UpdatePlayer(string season, int day)
+    {
+        var player = dbConnection.Table<PlayerCore>().FirstOrDefault();
+        if (player == null)
+        {
+            // 表中无数据，先插入一条初始记录
+            player = new PlayerCore();
+            dbConnection.Insert(player);
+        }
+        player.CurrentDay = day;
+        player.CurrentSeason = season;
+        dbConnection.Update(player);
+    }
+    public PlayerCore GetPlayerData()
+    {
+        return dbConnection.Table<PlayerCore>().FirstOrDefault();
+    }
+    public void InsertFarmlandTile(int tileX, int tileY, bool isCultivated)
+    {
+        var tile = new FarmlandTiles
+        {
+            TileX = tileX,
+            TileY = tileY,
+            IsCultivated = isCultivated
+        };
+        dbConnection.Insert(tile);
+    }
+    public List<FarmlandTiles> GetAllFarmlands()
+    {
+        return dbConnection.Table<FarmlandTiles>().ToList();
+    }
+    // 插入作物并关联耕地ID
+public void InsertCrop(int farmlandId, string cropType)
+{
+    var crop = new CropsStatus
+    {
+        FarmlandId = farmlandId,
+        CropType = cropType,
+        GrowthStage = 0, // 初始为种子阶段
+        DaysRemaining = 3 // 假设3天成熟
+    };
+    dbConnection.Insert(crop);
+    
+}
+    public List<CropsStatus> GetCropsByFarmlandId(int farmlandId)
+    {
+        return dbConnection.Table<CropsStatus>().Where(c => c.FarmlandId == farmlandId).ToList();
+    }
+
+    public FarmlandTiles GetFarmlandById(int farmlandId)
+    {
+        return dbConnection.Table<FarmlandTiles>().Where(f => f.Id == farmlandId).FirstOrDefault();
+    }
+
 }   
