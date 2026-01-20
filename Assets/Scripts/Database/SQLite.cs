@@ -1525,7 +1525,7 @@ namespace SQLite4Unity3d
 		/// <typeparam name='T'>
 		/// The type of objects to delete.
 		/// </typeparam>
-		public int DeleteAll<T> ()
+		public int DeleteAll<T> (Func<object, bool> value)
 		{
 			var map = GetMapping (typeof (T));
 			var query = string.Format("delete from \"{0}\"", map.TableName);

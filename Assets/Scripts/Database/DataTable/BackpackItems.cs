@@ -1,5 +1,6 @@
 using SQLite4Unity3d;
 
+[Table("BackpackItems")] 
 public class BackpackItems
 {
     [PrimaryKey, AutoIncrement]
@@ -8,4 +9,5 @@ public class BackpackItems
     public string ItemName { get; set; }//物品名称
     public int ItemCount { get; set; }//物品数量
     public string ItemDesc { get; set; }//物品描述，后期与yarnspinner
+    public int SaveBackupId { get; set; } 
 }

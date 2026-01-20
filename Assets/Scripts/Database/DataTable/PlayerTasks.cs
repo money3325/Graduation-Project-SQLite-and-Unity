@@ -1,5 +1,6 @@
 using SQLite4Unity3d;
 
+[Table("PlayerTasks")]
 public class PlayerTasks
 {
     [PrimaryKey, AutoIncrement]

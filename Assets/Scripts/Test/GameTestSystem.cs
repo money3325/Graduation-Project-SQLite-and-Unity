@@ -8,7 +8,7 @@ public class GameTestSystem : MonoBehaviour
     void Start()
     {
         DBManager.Instance.UpdatePlayer("春", 5);
-        DBManager.Instance.InsertCrop(1, "小麦");
+        //DBManager.Instance.InsertCrop(1, "小麦");
         PlayerCore readData = DBManager.Instance.GetPlayerData();
         Debug.Log($"{readData.CurrentSeason},{readData.CurrentDay}");
     }

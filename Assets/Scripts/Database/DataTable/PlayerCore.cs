@@ -1,5 +1,6 @@
 using SQLite4Unity3d;
 
+[Table("PlayerCore")]
 public class PlayerCore 
 {
     [PrimaryKey, AutoIncrement]
@@ -9,5 +10,6 @@ public class PlayerCore
     public int CurrentDay { get; set; }//当前季节天数
     public string CurrentTime { get; set; }//当前时间段，比如清晨
     public string LastSaveTime { get; set; }//最后的数据保存
+    public int SaveBackupId { get; set; }
    
 }

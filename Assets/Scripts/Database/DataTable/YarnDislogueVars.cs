@@ -1,5 +1,6 @@
 using SQLite4Unity3d;
 
+[Table("YarnDislogueVars")]
 public class YarnDislogueVars
 {
     [PrimaryKey, AutoIncrement]

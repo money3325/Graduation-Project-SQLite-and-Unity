@@ -1,5 +1,6 @@
 using SQLite4Unity3d;
 
+[Table("CropAtlas")]
 public class CropAtlas
 {
     [PrimaryKey, AutoIncrement]
