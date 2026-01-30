@@ -1,142 +1,73 @@
 using UnityEngine;
 using UnityEngine.Tilemaps;
-using System.Linq;
 
+/// <summary>
+/// 农场视觉管理器（耕地/浇水图标/作物视觉）
+/// </summary>
 public class FarmlandVisualizer : MonoBehaviour
 {
-    [Header("拖入对应Tilemap")]
-    public Tilemap farmlandTilemap; // 耕地Tilemap
-    public Tilemap statusIconTilemap; // 水滴Tilemap
+    [Header("核心Tilemap引用（拖入）")]
+    public Tilemap farmlandTilemap; // 农场土地主Tilemap
+    public Tilemap statusIconTilemap; // 状态图标（浇水/耕地）Tilemap
 
-    [Header("拖入对应Rule Tile")]
-    public TileBase unCultivatedTile; // 未耕地
-    public TileBase cultivatedTile; // 已耕地
-    public TileBase waterDropTile; // 水滴
+    [Header("视觉资源（拖入对应Tile）")]
+    public TileBase cultivatedTile; // 【已耕地Tile】拖入你的耕地Tile资源
+    public TileBase waterIconTile;  // 【浇水图标Tile】拖入你的浇水图标Tile资源
 
-    public CropManager cropManager; // 拖入CropManager
-    private Camera mainCamera;
-    private float lastClickTime = 0f; // 新增：点击冷却
-
-    void Start()
+    /// <summary>
+    /// 更新耕地视觉（切换已耕地/未耕地Tile）
+    /// </summary>
+    public void UpdateFarmlandVisual(FarmlandTiles farmland)
     {
-        mainCamera = Camera.main;
+        Debug.Log($"🔍 【视觉更新】处理耕地：坐标({farmland.TileX},{farmland.TileY})，状态：{(farmland.IsCultivated ? "已开垦" : "未开垦")}");
 
-        // 校验配置
-        if (farmlandTilemap == null || statusIconTilemap == null)
+        // 基础校验
+        if (farmlandTilemap == null || farmland == null)
         {
-            Debug.LogError("请拖入耕地和状态图标Tilemap！");
+            Debug.LogError("❌ 【视觉更新】farmlandTilemap或farmland为空，无法更新");
             return;
         }
-        if (unCultivatedTile == null || cultivatedTile == null || waterDropTile == null)
+        if (cultivatedTile == null)
         {
-            Debug.LogError("请拖入未耕地/已耕地/水滴Rule Tile！");
+            Debug.LogError("❌ 【视觉更新】未拖入【已耕地Tile】，请在Inspector中配置！");
             return;
         }
 
-        // 从数据库加载耕地状态（用你DBManager里的GetAllFarmlands方法）
-        InitFarmlandFromDB();
+        // 切换Tile（先清空再设置，避免缓存）
+        Vector3Int cellPos = new Vector3Int(farmland.TileX, farmland.TileY, 0);
+        farmlandTilemap.SetTile(cellPos, null);
+        farmlandTilemap.SetTile(cellPos, farmland.IsCultivated ? cultivatedTile : null);
+        farmlandTilemap.RefreshTile(cellPos); // 强制刷新Tilemap
+
+        Debug.Log($"✅ 【视觉更新】耕地({farmland.TileX},{farmland.TileY})视觉切换完成！");
     }
 
-    // 从数据库加载耕地状态，同步到Tilemap
-    private void InitFarmlandFromDB()
+    /// <summary>
+    /// 显示浇水图标
+    /// </summary>
+    public void ShowWaterIcon(Vector3Int cellPos)
     {
-        if (DBManager.Instance == null)
+        // 校验Tilemap和图标资源
+        if (statusIconTilemap == null) return;
+        if (waterIconTile == null)
         {
-            Debug.LogError("DBManager未初始化！");
+            Debug.LogError("⚠️ 未拖入【浇水图标Tile】资源，请在FarmlandVisualizer的Inspector中配置！");
             return;
         }
 
-        var allFarmlands = DBManager.Instance.GetAllFarmlands(); // 用你现有的方法名
-        if (allFarmlands == null || allFarmlands.Count == 0)
-        {
-            Debug.Log("数据库暂无耕地数据");
-            return;
-        }
-
-        // 遍历数据库记录，同步显示
-        foreach (var farmland in allFarmlands)
-        {
-            Vector3Int cellPos = new Vector3Int(farmland.TileX, farmland.TileY, 0);
-            // 同步耕地状态
-            farmlandTilemap.SetTile(cellPos, farmland.IsCultivated ? cultivatedTile : unCultivatedTile);
-            // 同步浇水状态
-            statusIconTilemap.SetTile(cellPos, farmland.IsWatered ? waterDropTile : null);
-        }
+        statusIconTilemap.SetTile(cellPos, waterIconTile);
     }
 
-    void Update()
+    /// <summary>
+    /// 清空所有状态图标（新一天时调用，来自CropManager）
+    /// </summary>
+    public void ClearAllStatusIcons()
     {
-        if (Input.GetMouseButtonDown(0))
+        if (statusIconTilemap == null) return;
+        BoundsInt bounds = statusIconTilemap.cellBounds;
+        foreach (Vector3Int cellPos in bounds.allPositionsWithin)
         {
-            HandleTileClick();
+            statusIconTilemap.SetTile(cellPos, null);
         }
-    }
-
-    // 点击交互：普通点击耕地，Shift点击浇水，同步数据库
-    private void HandleTileClick()
-    {
-        // 🔥 加防重复点击（1秒内仅响应一次）
-        if (Time.time - lastClickTime < 1f) return;
-        lastClickTime = Time.time;
-        if (mainCamera == null || DBManager.Instance == null) return;
-
-        // 转换鼠标坐标到Tilemap格子
-        Vector2 mouseWorldPos = mainCamera.ScreenToWorldPoint(Input.mousePosition);
-        RaycastHit2D hit = Physics2D.Raycast(mouseWorldPos, Vector2.zero);
-        if (hit.collider == null || hit.collider.gameObject != farmlandTilemap.gameObject)
-            return;
-
-        Vector3Int cellPos = farmlandTilemap.WorldToCell(mouseWorldPos);
-        int tileX = cellPos.x;
-        int tileY = cellPos.y;
-
-        // 查找该格子的数据库记录（无则新建）
-        var farmland = DBManager.Instance.GetAllFarmlands()
-            .FirstOrDefault(f => f.TileX == tileX && f.TileY == tileY);
-
-        if (farmland == null)
-        {
-            // 新建记录：默认未耕地、未浇水
-            DBManager.Instance.InsertFarmlandTile(tileX, tileY, false, false, -1);
-            farmland = DBManager.Instance.GetAllFarmlands()
-                .FirstOrDefault(f => f.TileX == tileX && f.TileY == tileY);
-        }
-        // 优先处理「播种」（已选种子时）
-        if (cropManager != null && cropManager.isSinglePlantMode)
-        {
-            cropManager.TryPlantCrop(cellPos, farmland);
-            return;
-        }
-
-    // 3. 普通点击：耕地（修复逻辑，更可靠）
-        if (Input.GetKey(KeyCode.LeftShift))
-        {
-            // 浇水：仅已耕地可浇水
-            if (!farmland.IsCultivated)
-            {
-                Debug.Log("请先耕地再浇水");
-                return;
-            }
-            farmland.IsWatered = !farmland.IsWatered;
-            DBManager.Instance.UpdateFarmland(farmland);
-            statusIconTilemap.SetTile(cellPos, farmland.IsWatered ? waterDropTile : null);
-            Debug.Log($"耕地({tileX},{tileY})浇水状态：{farmland.IsWatered}");
-        }
-        else
-        {
-            // 耕地：未耕地→已耕地
-            if (!farmland.IsCultivated)
-            {
-                farmland.IsCultivated = true;
-                DBManager.Instance.UpdateFarmland(farmland);
-                farmlandTilemap.SetTile(cellPos, cultivatedTile);
-                Debug.Log($"耕地({tileX},{tileY})已开垦");
-            }
-            else
-            {
-                Debug.Log($"耕地({tileX},{tileY})已是已耕地");
-            }
-        }
-        
     }
 }

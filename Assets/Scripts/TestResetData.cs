@@ -8,6 +8,7 @@ public class TestResetData : MonoBehaviour
     public CropManager cropManager;
     public FarmlandVisualizer farmlandManager;
     public TimeManager timeManager;
+    
 
     void Update()
     {
@@ -76,7 +77,7 @@ public class TestResetData : MonoBehaviour
         
         // 重置玩家数据为初始状态（第1天，春天，6点）
         dbManager.dbConnection.Execute("DELETE FROM PlayerCore");
-        dbManager.UpdatePlayer("春", 1);
+        //dbManager.UpdatePlayer("春", 1);
 
         Debug.Log("🗄️ 数据库已重置（作物清空/耕地状态重置/玩家时间重置）");
     }
@@ -87,8 +88,8 @@ public class TestResetData : MonoBehaviour
         // 重置CropManager
         if (cropManager != null)
         {
-            cropManager.selectedCrop = null;
-            cropManager.isSinglePlantMode = false;
+            //cropManager.selectedCrop = null;
+            //cropManager.isSinglePlantMode = false;
         }
 
         // 🔥 关键修改：仅清空浇水图标（statusIconTilemap），不改动farmlandTilemap的原始地图
