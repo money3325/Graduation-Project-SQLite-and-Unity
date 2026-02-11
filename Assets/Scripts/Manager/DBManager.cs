@@ -30,27 +30,24 @@ public class DBManager : MonoBehaviour
     //对于每一帧，初始化数据库连接，将表放到这个里面
     void Awake()
     {
-            // 单例去重：如果已有实例，销毁当前物体
+        // 单例去重：如果已有实例，销毁当前物体
         if (instance != null && instance != this)
         {
             Destroy(gameObject);
             return;
         }
-        instance=this;
+        instance = this;
         DontDestroyOnLoad(gameObject);
-        if(dbConnection==null)
-        {
-            string dbPath = Application.persistentDataPath + "/GameData.db";
-            dbConnection = new SQLiteConnection(dbPath, SQLiteOpenFlags.ReadWrite | SQLiteOpenFlags.Create);
-            CreateAllTables();
-            // 仅当表中无数据时，插入初始耕地（避免重复）
-            /*if (dbConnection.Table<FarmlandTiles>().Count() == 0)
-            {
-                InsertFarmlandTile(2, 3, true, false, -1); 
-                Debug.Log("已插入初始耕地数据");
-            }*/
-        }
         
+            if (dbConnection == null)
+            {
+                string dbPath = Application.persistentDataPath + "/GameData.db";
+                // 尝试创建连接
+                dbConnection = new SQLiteConnection(dbPath, SQLiteOpenFlags.ReadWrite | SQLiteOpenFlags.Create);
+
+                // 创建表
+                CreateAllTables();
+            }
     }
     void Start()
     {
@@ -94,7 +91,7 @@ public class DBManager : MonoBehaviour
     {
         return dbConnection.Table<PlayerCore>().FirstOrDefault();
     }
-    // 🔥 修正版：无重载、无递归，直接存储所有字段
+    // 修正版：无重载、无递归，直接存储所有字段
     public void InsertFarmlandTile(int tileX, int tileY, bool isCultivated, bool isWatered, int saveBackupID)
     {
         // 先校验参数（避免无效插入）
@@ -152,10 +149,9 @@ public class DBManager : MonoBehaviour
     {
         if (crop == null) return -1;
         if (crop.SaveBackupID == 0) crop.SaveBackupID = -1; 
-        // 🔥 关键：SQLite4Unity3d的Insert会返回自增ID，必须接收！
+        //  关键：SQLite4Unity3d的Insert会返回自增ID，必须接收！
         int newCropId = dbConnection.Insert(crop);
-        crop.Id = newCropId; // 🔥 把自增ID赋值给crop的Id字段（解决ID=0）
-        Debug.Log($"✅ 插入作物实例：{crop.CropType}，ID：{crop.Id}，备份ID：{crop.SaveBackupID}");
+        crop.Id = newCropId; //  把自增ID赋值给crop的Id字段（解决ID=0）
         return newCropId; // 返回ID，供外部使用
     }
     public List<SaveBackups> QueryValidBackups()
@@ -173,10 +169,6 @@ public class DBManager : MonoBehaviour
     public FarmlandTiles GetFarmlandById(int farmlandId)
     {
         var farmland = dbConnection.Table<FarmlandTiles>().FirstOrDefault(f => f.Id == farmlandId);
-        if (farmland == null)
-        {
-            Debug.LogWarning($"⚠️ 按ID查找耕地失败：ID={farmlandId}，尝试按坐标查找");
-        }
         return farmland;
     }
     public void SaveGame(string season,int day,string time)
@@ -236,15 +228,9 @@ public class DBManager : MonoBehaviour
     public bool LoadBackupByBackupId(int backupId)
     {
         var targetBackup = dbConnection.Table<SaveBackups>().FirstOrDefault(b => b.Id == backupId && b.IsValid);
-        if (targetBackup == null)
-        {
-            Debug.LogError($"❌ 备份ID={backupId}不存在或无效");
-            return false;
-        }
 
         // 删除当前游戏数据
         DeleteCurrentGameData();
-        Debug.Log($"✅ 开始恢复备份：ID={backupId}，时间={targetBackup.SaveTime}");
 
         // 1. 恢复玩家数据
         var backupPlayer = dbConnection.Table<PlayerCore>().FirstOrDefault(p => p.SaveBackupId == backupId);
@@ -258,7 +244,6 @@ public class DBManager : MonoBehaviour
                 SaveBackupId = -1
             };
             dbConnection.Insert(currentPlayer);
-            Debug.Log($"✅ 玩家数据恢复完成：{currentPlayer.CurrentSeason}第{currentPlayer.CurrentDay}天");
         }
 
         // 2. 恢复耕地数据（按坐标插入，生成新的自增ID）
@@ -267,28 +252,25 @@ public class DBManager : MonoBehaviour
         {
             InsertFarmlandTile(farmland.TileX, farmland.TileY, farmland.IsCultivated, farmland.IsWatered, -1);
         }
-        Debug.Log($"✅ 耕地数据恢复完成：共{backupFarmlands.Count}块耕地");
 
-        // 3. 🔥 核心修改：恢复作物数据（同步FarmlandId为新耕地ID）
-        // 🔥 修复后的作物恢复核心代码（无CS1061报错）
-    var backupCrops = dbConnection.Table<CropsStatus>().Where(c => c.SaveBackupID == backupId).ToList();
-    foreach (var crop in backupCrops)
+        // 3.  核心修改：恢复作物数据（同步FarmlandId为新耕地ID）
+        // 修复后的作物恢复核心代码（无CS1061报错）
+        var backupCrops = dbConnection.Table<CropsStatus>().Where(c => c.SaveBackupID == backupId).ToList();
+        foreach (var crop in backupCrops)
     {
-        // 🔥 关键：先查备份里的旧耕地（获取坐标），不是从crop取TileY！
+        // 关键：先查备份里的旧耕地（获取坐标），不是从crop取TileY！
         FarmlandTiles oldFarmland = dbConnection.Table<FarmlandTiles>()
             .FirstOrDefault(f => f.Id == crop.FarmlandId && f.SaveBackupID == backupId);
         
         if (oldFarmland == null)
         {
-            Debug.LogWarning($"⚠️ 跳过恢复作物：{crop.CropType}，旧耕地ID={crop.FarmlandId}不存在");
             continue;
         }
 
-        // 🔥 按旧耕地的坐标，找当前游戏的新耕地（SaveBackupID=-1）
+        // 按旧耕地的坐标，找当前游戏的新耕地（SaveBackupID=-1）
         FarmlandTiles newFarmland = GetFarmlandByTilePos(oldFarmland.TileX, oldFarmland.TileY);
         if (newFarmland == null)
         {
-            Debug.LogWarning($"⚠️ 跳过恢复作物：{crop.CropType}，对应坐标({oldFarmland.TileX},{oldFarmland.TileY})无耕地");
             continue;
         }
 
@@ -304,10 +286,7 @@ public class DBManager : MonoBehaviour
             SaveBackupID = -1
         };
         InsertCrop(newCrop);
-        Debug.Log($"✅ 作物恢复完成：{newCrop.CropType}，耕地ID={newCrop.FarmlandId}，阶段={newCrop.GrowthStage}");
     }
-
-        Debug.Log($"✅ 备份ID={backupId}恢复完成！");
         CleanDuplicateCrops();
         return true;
     }
@@ -321,7 +300,6 @@ public class DBManager : MonoBehaviour
             int delPlayer = dbConnection.Execute("DELETE FROM PlayerCore WHERE SaveBackupId = ?", -1);
             int delFarmland = dbConnection.Execute("DELETE FROM FarmlandTiles WHERE SaveBackupID = ?", -1);
             int delCrop = dbConnection.Execute("DELETE FROM CropsStatus WHERE SaveBackupID = ?", -1);
-            Debug.Log($"✅ 清空当前游戏数据：玩家{delPlayer}条，耕地{delFarmland}条，作物{delCrop}条");
         }
         catch (System.Exception e)
         {
@@ -345,9 +323,8 @@ public class DBManager : MonoBehaviour
     {
         if (dbConnection != null)
         {
-            dbConnection.Commit(); // 🔥 强制提交所有数据（退出时必存）
+            dbConnection.Commit(); //  强制提交所有数据（退出时必存）
             dbConnection.Close();
-            Debug.Log("✅ 数据库连接关闭，数据已提交（永不丢失）");
         }
     }
     public void UpdateFarmland(FarmlandTiles farmland)
@@ -454,11 +431,6 @@ public class DBManager : MonoBehaviour
     /// </summary>
     public void CleanDuplicateCrops()
     {
-        if (dbConnection == null)
-        {
-            Debug.LogError("数据库连接为空，无法清理重复作物");
-            return;
-        }
 
         try
         {
@@ -492,11 +464,8 @@ public class DBManager : MonoBehaviour
                 for (int i = 1; i < crops.Count; i++)
                 {
                     dbConnection.Delete(crops[i]);
-                    Debug.LogWarning($"清理重复作物：耕地ID={farmlandId}，删除作物ID={crops[i].Id}");
                 }
             }
-
-            Debug.Log($"✅ 重复作物数据清理完成，共处理{duplicateFarmlandIds.Count}块耕地的重复记录");
         }
         catch (System.Exception e)
         {
@@ -542,7 +511,7 @@ public class DBManager : MonoBehaviour
             {
                 existingItem.ItemCount += count;
                 dbConnection.Update(existingItem);
-                Debug.Log($"✅ 【背包数据库】叠加物品：{itemType}，当前数量：{existingItem.ItemCount}");
+                Debug.Log($" 【背包数据库】叠加物品：{itemType}，当前数量：{existingItem.ItemCount}");
             }
             else
             {
@@ -553,12 +522,12 @@ public class DBManager : MonoBehaviour
                     SaveBackupId = -1 // 必须标记为有效数据，否则LoadBackpackItems读取不到
                 };
                 dbConnection.Insert(newItem);
-                Debug.Log($"✅ 【背包数据库】新增物品：{itemType}，数量：{count}");
+                Debug.Log($" 【背包数据库】新增物品：{itemType}，数量：{count}");
             }
         }
         catch (System.Exception e)
         {
-            Debug.LogError($"❌ 【背包数据库】添加物品失败：{e.Message}");
+            Debug.LogError($" 【背包数据库】添加物品失败：{e.Message}");
         }
     }
     /// <summary>
@@ -595,19 +564,17 @@ public class DBManager : MonoBehaviour
         try
         {
             dbConnection.Delete<BackpackItems>($"WHERE ItemType = '{itemType}'");
-            Debug.Log($"✅ 成功删除背包物品：{itemType}");
+            Debug.Log($" 成功删除背包物品：{itemType}");
         }
         catch (System.Exception e)
         {
-            Debug.LogError($"❌ 删除背包物品失败：{e.Message}");
+            Debug.LogError($" 删除背包物品失败：{e.Message}");
         }
     }
     public void InitFarmlandDataFromTilemap(Tilemap farmlandTilemap)
 {
-    Debug.Log($"🔍 【耕地初始化】遍历Tilemap边界：{farmlandTilemap.cellBounds}");
     // 清空旧有效耕地数据（SaveBackupID=-1为当前有效）
     int delCount = dbConnection.Delete<FarmlandTiles>("WHERE SaveBackupID = -1");
-    Debug.Log($"🔍 【耕地初始化】清空旧数据，删除{delCount}条记录");
 
     int genCount = 0;
     BoundsInt bounds = farmlandTilemap.cellBounds;
@@ -616,7 +583,6 @@ public class DBManager : MonoBehaviour
         TileBase tile = farmlandTilemap.GetTile(cellPos);
         if (tile != null) // 有Tile的位置视为耕地（可按你的Tile类型筛选）
         {
-            Debug.Log($"🔍 【耕地初始化】找到有效Tile：坐标({cellPos.x},{cellPos.y})，Tile名：{tile.name}");
             FarmlandTiles farmland = new FarmlandTiles
             {
                 TileX = cellPos.x,
@@ -627,10 +593,86 @@ public class DBManager : MonoBehaviour
             };
             dbConnection.Insert(farmland);
             genCount++;
-            Debug.Log($"✅ 【耕地初始化】生成耕地：ID={farmland.Id}，坐标({cellPos.x},{cellPos.y})");
         }
     }
     int validCount = dbConnection.Table<FarmlandTiles>().Count(f => f.SaveBackupID == -1);
-    Debug.Log($"📊 【耕地初始化】完成！共生成{genCount}块，当前有效耕地：{validCount}块");
 }
+    #region 任务数据管理
+    /// <summary>
+    /// 插入玩家任务（当前有效任务：SaveBackupID=-1）
+    /// </summary>
+    public int InsertPlayerTask(PlayerTasks task)
+    {
+        if (dbConnection == null)
+        {
+            return -1;
+        }
+        if (task == null)
+        {
+            return -1;
+        }
+        // 强制标记为当前有效任务
+        task.SaveBackupID = -1;
+        try
+        {
+            int insertId = dbConnection.Insert(task);
+            // 验证：插入后立即查询，确认是否存入
+            var checkTask = dbConnection.Table<PlayerTasks>().FirstOrDefault(t => t.Id == insertId);
+            if (checkTask != null)
+            {
+                Debug.Log($"任务插入成功并验证：ID={insertId}，名称={checkTask.TaskName}");
+            }
+            else
+            {
+                Debug.LogError($" 任务插入返回ID={insertId}，但数据库中查询不到！");
+                return -1;
+            }
+            return insertId;
+        }
+        catch (System.Exception e)
+        {
+            Debug.LogError($" 插入任务失败：{e.Message}");
+            return -1;
+        }
+    }
+
+    /// <summary>
+    /// 获取当前有效任务（SaveBackupID=-1）
+    /// </summary>
+    public List<PlayerTasks> GetCurrentPlayerTasks()
+    {
+        if (dbConnection == null)
+        {
+            return new List<PlayerTasks>();
+        }
+        var tasks = dbConnection.Table<PlayerTasks>()
+            .Where(t => t.SaveBackupID == -1) // 仅查当前有效任务
+            .OrderBy(t => t.DayAssigned)
+            .ToList();
+        return tasks;
+    }
+
+    /// <summary>
+    /// 更新任务进度/状态
+    /// </summary>
+    public bool UpdatePlayerTask(PlayerTasks task)
+    {
+        if (dbConnection == null || task == null)
+        {
+            Debug.LogError("数据库连接或任务对象为空，无法更新任务！");
+            return false;
+        }
+        try
+        {
+            int updateCount = dbConnection.Update(task);
+            Debug.Log($" 任务更新结果：{task.TaskName}，影响行数={updateCount}");
+            return updateCount > 0;
+        }
+        catch (System.Exception e)
+        {
+            Debug.LogError($" 更新任务失败：{e.Message}");
+            return false;
+        }
+    }
+    #endregion
 }   

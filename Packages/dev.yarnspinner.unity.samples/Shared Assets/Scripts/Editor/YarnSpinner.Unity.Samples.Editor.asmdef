@@ -1,0 +1,41 @@
+{
+    "name": "Yarn.Unity.Samples.Editor",
+    "rootNamespace": "",
+    "references": [
+        "YarnSpinner.Unity.Editor",
+        "YarnSpinner.Unity.Samples",
+        "Unity.Localization.Editor",
+        "Unity.Localization",
+        "Unity.Addressables",
+        "Unity.Addressables.Editor",
+        "Unity.TextMeshPro",
+        "Unity.TextMeshPro.Editor"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": true,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [
+        {
+            "name": "com.unity.localization",
+            "expression": "1.0",
+            "define": "USE_UNITY_LOCALIZATION"
+        },
+        {
+            "name": "com.unity.ugui",
+            "expression": "2",
+            "define": "USE_TMP"
+        },
+        {
+            "name": "com.unity.textmeshpro",
+            "expression": "1",
+            "define": "USE_TMP"
+        }
+    ],
+    "noEngineReferences": false
+}

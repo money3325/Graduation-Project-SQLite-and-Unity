@@ -29,7 +29,8 @@ public class TimeManager : MonoBehaviour
 
     //新一天到来的事件（供CropManager订阅）
     public delegate void NewDayHandler();
-    public event NewDayHandler OnNewDay; // 事件名：OnNewDay
+    public event NewDayHandler OnNewDay; 
+    
     void Start()
     {
         PlayerCore playerData=DBManager.Instance.GetPlayerData();
@@ -37,7 +38,6 @@ public class TimeManager : MonoBehaviour
         {
             currentSeason=playerData.CurrentSeason;
             currentDay=playerData.CurrentDay;
-            //currentDay=playerData.CurrentDay;
             currentHour=6;
             DBManager.Instance.UpdatePlayer(currentSeason,currentDay);
             UpdateMaskColor();
@@ -45,18 +45,22 @@ public class TimeManager : MonoBehaviour
         }
         else
         {
+            // 【保留你的设置】新玩家初始天数=28，绝不修改！
             currentSeason="春";
             currentDay=28;
             currentHour=6;
             DBManager.Instance.UpdatePlayer(currentSeason,currentDay);
         }
+        // 初始化通知任务管理器，无报错，静默执行
+        TriggerTaskManagerDayChange();
         StartCoroutine(TimeLoop());
     }
+
     IEnumerator TimeLoop()
     {
         while(true)
         {   
-             currentHour+=1/timeToHour;
+            currentHour+=1/timeToHour;
             if(currentHour>=24)
             {   
                JumpToNextDay();
@@ -67,58 +71,77 @@ public class TimeManager : MonoBehaviour
             yield return new WaitForSeconds(1f);
         }
     }
-   public void UpdateMaskColor()
+
+    public void UpdateMaskColor()
     {
-        if(currentHour>=6&&currentHour<=16)
-            {
-                dayNightMask.color=dayColor;
-            }
-            else if(currentHour>=16&&currentHour<18)
-            {
-                float t=(currentHour-16)/1;//3小时渐变
-                dayNightMask.color=Color.Lerp(dayColor,duskColor,t);
-            }else if(currentHour>=18&&currentHour<19)
-            {
-                float t=(currentHour-18)/1;//3小时渐变
-                dayNightMask.color=Color.Lerp(duskColor,nightColor,t);
-            }else
-            {
-                dayNightMask.color=nightColor;
-            }
+        if(dayNightMask == null) return;
+        
+        if(currentHour>=6&&currentHour<16)
+        {
+            dayNightMask.color=dayColor;
+        }
+        else if(currentHour>=16&&currentHour<18)
+        {
+            float t=(currentHour-16)/2f;
+            dayNightMask.color=Color.Lerp(dayColor,duskColor,t);
+        }else if(currentHour>=18&&currentHour<19)
+        {
+            float t=(currentHour-18)/1f;
+            dayNightMask.color=Color.Lerp(duskColor,nightColor,t);
+        }else
+        {
+            dayNightMask.color=nightColor;
+        }
     }
+
     public void JumpToNextDay()
     {
         currentDay++;
         currentHour=6;
+        
+        // 你的季节天数逻辑：28天满，重置为1天
         if(currentDay>dayToSeason)
         {
             currentDay=1;
-            //这里可扩展季节交替逻辑
+            // 季节循环可自行扩展
         }
+        
         DBManager.Instance.UpdatePlayer(currentSeason,currentDay);
         OnNewDay?.Invoke();
+        // 天数变化通知任务，无报错，静默执行
+        TriggerTaskManagerDayChange();
     } 
+
+    // 【无报错核心】通知任务管理器，找不到也不抛红错，仅静默
+    private void TriggerTaskManagerDayChange()
+    {
+        if(TaskManager.Instance != null)
+        {
+            TaskManager.Instance.OnGameDayChanged(currentDay);
+        }
+    }
+
     private void UpdateCurrentPeriod()
     {
-         //判断当前时段
-            if(currentHour>dayStart&&currentHour<duskStart)
-            {
-                currentPeriod="白天";
-            }else if(currentHour>duskStart&&currentHour<nightStart)
-            {
-                currentPeriod="傍晚";
-            }else
-            {
-                currentPeriod="晚上";
-            }
+        if(currentHour>=dayStart&&currentHour<duskStart)
+        {
+            currentPeriod="白天";
+        }else if(currentHour>=duskStart&&currentHour<nightStart)
+        {
+            currentPeriod="傍晚";
+        }else
+        {
+            currentPeriod="晚上";
+        }
     }
-     public void UpdateTimeUI()
+
+    public void UpdateTimeUI()
     {
         if(timeDisplayText!=null)
-            {
-                string hourStr=Mathf.FloorToInt(currentHour).ToString("D2");
-                string minyteStr=Mathf.FloorToInt(currentHour%1*60).ToString("D2");
-                timeDisplayText.text=$"{currentSeason}第{currentDay}天{hourStr}:{minyteStr}({currentPeriod})";
-            }
+        {
+            string hourStr=Mathf.FloorToInt(currentHour).ToString("D2");
+            string minyteStr=Mathf.FloorToInt(currentHour%1*60).ToString("D2");
+            timeDisplayText.text=$"{currentSeason}第{currentDay}天{hourStr}:{minyteStr}({currentPeriod})";
+        }
     }
 }

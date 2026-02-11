@@ -63,7 +63,6 @@ public class CropCollect : MonoBehaviour
         if (cropData != null && cropData.GrowthStage == 3)
         {
             isMature = false;
-            Debug.Log($"✅ 12天作物{cropType}（ID：{cropId}）恢复状态：已首次采集，等待浇水2次");
         }
     }
 
@@ -78,10 +77,6 @@ public class CropCollect : MonoBehaviour
         }
 
         bool isCollectSuccess = OnCollectClick();
-        if (isCollectSuccess)
-        {
-            Debug.Log($"✅ 作物{cropType}（ID：{cropId}）采集成功");
-        }
     }
 
     /// <summary>
@@ -122,8 +117,6 @@ public class CropCollect : MonoBehaviour
             AddMatureCropToBackpack();
             DBManager.Instance.ResetCropWateringCount(cropId);
             isMature = true;
-
-            Debug.Log($"✅ 12天作物{cropType}：浇水满2次，再次采集成功！");
             return true;
         }
 
@@ -143,6 +136,8 @@ public class CropCollect : MonoBehaviour
             
             // 必须调用：添加作物到背包
             AddMatureCropToBackpack();
+            // 2. 同步任务进度（触发"收获小麦"任务的进度+1）
+            //TaskManager.Instance.UpdateProgress("收获小麦", 1);
             
             Destroy(gameObject);
             return true;
@@ -214,19 +209,8 @@ public class CropCollect : MonoBehaviour
     /// </summary>
     private void AddMatureCropToBackpack()
     {
-        Debug.Log("=====================================");
-        Debug.Log($"🔍 【作物采集】开始添加作物到背包");
-        Debug.Log($"🔍 【作物采集】作物类型：{cropType}，添加数量：1");
 
-        // 1. 校验BackpackManager单例是否存在
-        if (BackpackManager.Instance == null)
-        {
-            Debug.LogError($"❌ 【作物采集】BackpackManager.Instance为null！场景中无BackpackManager物体");
-            Debug.Log("=====================================\n");
-            return;
-        }
-
-        // 2. 调用背包叠加添加方法
+        // 2调用背包叠加添加方法
         try
         {
             BackpackManager.Instance.AddItem(cropType, 1);
@@ -236,8 +220,6 @@ public class CropCollect : MonoBehaviour
         {
             Debug.LogError($"❌ 【作物采集】调用背包AddItem失败：{e.Message}");
         }
-
-        Debug.Log("=====================================\n");
     }
 
     /// <summary>

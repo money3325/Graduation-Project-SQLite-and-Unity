@@ -32,8 +32,8 @@ public class CropManager : MonoBehaviour
     public CropConfig selectedCrop; 
     public Dictionary<int, GameObject> cropInstances = new Dictionary<int, GameObject>();
     public bool isSinglePlantMode = false; // 公开供FarmlandManager访问
-    private bool isPlanting = false; // 🔥 新增：防重复点击播种
-    private bool isLoaded = false; // 🔥 新增：防重复加载标志
+    private bool isPlanting = false; // 防重复点击播种
+    private bool isLoaded = false; // 防重复加载标志
 
     private static CropManager instance;
     public static CropManager Instance
@@ -43,10 +43,6 @@ public class CropManager : MonoBehaviour
             if (instance == null)
             {
                 instance = FindObjectOfType<CropManager>();
-                if (instance == null)
-                {
-                    Debug.LogError("场景中未找到CropManager脚本！请确保场景中有挂载该脚本的物体");
-                }
             }
             return instance;
         }
@@ -91,12 +87,10 @@ public class CropManager : MonoBehaviour
         selectedCrop = cropConfigs.FirstOrDefault(config => config.cropType == cropType);
         if (selectedCrop == null)
         {
-            Debug.Log($"未找到{cropType}配置");
             isSinglePlantMode = false;
             return;
         }
         isSinglePlantMode = true;
-        Debug.Log($"进入单次播种模式：{cropType}");
     }
 
     // 尝试播种（核心：防重复生成）
@@ -104,35 +98,22 @@ public class CropManager : MonoBehaviour
 public void TryPlantCrop(Vector3Int cellPos, FarmlandTiles farmland)
 {
     if (isPlanting) return;
-    // 新增：仅在背包播种模式下可播种
-    if (BackpackManager.Instance.currentMode != BackpackManager.BackpackMode.Plant)
-    {
-        Debug.LogWarning("⚠️ 未进入播种模式，无法播种，请先在背包选中种子");
-        return;
-    }
     isPlanting = true;
 
     try
     {
         // 基础校验（不变）
         if (!isSinglePlantMode || selectedCrop == null) { return; }
-        if (!farmland.IsCultivated) { Debug.Log("仅已耕地可播种"); return; }
         
         var currentCrops = dbManager.dbConnection.Table<CropsStatus>()
             .Where(c => c.FarmlandId == farmland.Id && c.SaveBackupID == -1)
             .ToList();
-        if (currentCrops.Count > 0) 
-        { 
-            Debug.LogWarning($"该耕地已有作物，禁止重复播种：耕地ID={farmland.Id}"); 
-            return; 
-        }
 
         // 新增：获取当前选中的种子类型，准备消耗
         string seedType = $"{selectedCrop.cropType}_Seed";
         var seedItem = DBManager.Instance.GetBackpackItemByType(seedType);
         if (seedItem == null || seedItem.ItemCount <= 0)
         {
-            Debug.LogError($"⚠️ 种子{seedType}已耗尽，无法播种");
             BackpackManager.Instance.ExitAllModes(); // 耗尽后退出播种模式
             return;
         }
@@ -147,7 +128,6 @@ public void TryPlantCrop(Vector3Int cellPos, FarmlandTiles farmland)
 
         // 新增：消耗1个对应种子（同步数据库+背包UI）
         BackpackManager.Instance.ConsumeItem(seedType, 1);
-        Debug.Log($"✅ 成功播种{selectedCrop.cropType}，ID：{newCropId}，消耗种子{seedType} x 1");
     }
     finally
     {
@@ -168,17 +148,12 @@ public void TryPlantCrop(Vector3Int cellPos, FarmlandTiles farmland)
             return;
         }
         isLoaded = true;
-
-        Debug.Log("===== 【恢复3个生长阶段】开始加载作物 =====");
         var allCropsFromDB = dbManager.GetAllCrops();
-        Debug.Log($"📊 数据库总作物数：{allCropsFromDB?.Count ?? 0}");
 
         var allValidCrops = allCropsFromDB?.Where(c => c.SaveBackupID == -1 && c.Id > 0)?.ToList() ?? new List<CropsStatus>();
-        Debug.Log($"✅ 有效作物（ID>0+SaveBackupID=-1）数：{allValidCrops.Count}");
 
         if (allValidCrops.Count == 0)
         {
-            Debug.Log("ℹ️ 无有效作物，加载完成");
             ClearInvalidCropInstances(new List<CropsStatus>());
             return;
         }
@@ -189,51 +164,42 @@ public void TryPlantCrop(Vector3Int cellPos, FarmlandTiles farmland)
         {
             if (processedFarmlandIds.Contains(crop.FarmlandId))
             {
-                Debug.LogWarning($"🗑️ 清理重复作物：ID={crop.Id}，耕地ID={crop.FarmlandId}");
                 dbManager.DeleteCropStatusById(crop.Id);
                 continue;
             }
             processedFarmlandIds.Add(crop.FarmlandId);
             uniqueCrops.Add(crop);
         }
-        Debug.Log($"✅ 去重后有效作物数：{uniqueCrops.Count}");
 
         // 清空旧实例+字典（避免残留）
         foreach (var inst in cropInstances.Values) Destroy(inst);
         cropInstances.Clear();
-        Debug.Log("🧹 清空旧作物实例+字典，准备重新生成");
 
         var cropMapByTilePos = new Dictionary<(int x, int y), CropsStatus>();
         foreach (var crop in uniqueCrops)
         {
-            Debug.Log($"🔍 处理作物：ID={crop.Id}，类型={crop.CropType}，阶段={crop.GrowthStage}（0=种子/1=幼苗/2=成熟），耕地ID={crop.FarmlandId}");
 
             // 找耕地
             FarmlandTiles farmland = dbManager.GetAllFarmlands()
                 .FirstOrDefault(f => f.Id == crop.FarmlandId && f.SaveBackupID == -1);
             if (farmland == null)
             {
-                Debug.LogError($"❌ 作物ID={crop.Id}：无对应耕地，删除无效数据");
                 dbManager.DeleteCropStatusById(crop.Id);
                 continue;
             }
-            Debug.Log($"✅ 找到耕地：坐标({farmland.TileX},{farmland.TileY})，ID={farmland.Id}");
 
             // 找作物配置
             CropConfig config = cropConfigs.FirstOrDefault(c => c.cropType == crop.CropType);
             if (config == null)
             {
-                Debug.LogError($"❌ 作物ID={crop.Id}：无配置（{crop.CropType}），删除无效数据");
                 dbManager.DeleteCropStatusById(crop.Id);
                 continue;
             }
-            Debug.Log($"✅ 找到配置：{config.cropType}，总天数={config.totalGrowthDays}");
 
             // 计算坐标
             Vector3 spawnPos = GetSpawnPos(farmland.TileX, farmland.TileY);
-            Debug.Log($"📍 生成坐标：({spawnPos.x},{spawnPos.y})");
 
-            // 🔥 核心恢复：3个生长阶段明确映射，不合并、不跳过
+            //  核心恢复：3个生长阶段明确映射，不合并、不跳过
             GameObject prefab = crop.GrowthStage switch
             {
                 0 => config.seedPrefab,    // 阶段0：种子预制体（播种初始状态）
@@ -247,27 +213,23 @@ public void TryPlantCrop(Vector3Int cellPos, FarmlandTiles farmland)
                 Debug.LogError($"❌ 作物ID={crop.Id}：阶段{crop.GrowthStage}无预制体（请检查的{GetStageName(crop.GrowthStage)}预制体是否拖入），跳过");
                 continue;
             }
-            Debug.Log($"🎯 使用预制体：{prefab.name}（对应阶段{crop.GrowthStage}={GetStageName(crop.GrowthStage)}）");
 
             // 生成实例
             GameObject inst = Instantiate(prefab, spawnPos, Quaternion.identity, cropParent);
             inst.transform.localScale = Vector3.one;
             cropInstances[crop.Id] = inst;
-            Debug.Log($"✅ 作物ID={crop.Id}：实例生成成功，添加到字典");
 
             // 成熟/12天作物挂载采集脚本
             if (crop.GrowthStage >= 2)
             {
                 AddCropCollectScript(crop, inst);
-                Debug.Log($"📎 挂载采集脚本成功，可点击：{inst.GetComponent<CropCollect>().isMature}");
             }
         }
 
         ClearInvalidCropInstances(uniqueCrops);
-        Debug.Log("===== 【恢复3个生长阶段】作物加载完成 =====\n");
     }
 
-    // 🔥 新增：辅助方法（打印阶段名称，更清晰，不影响玩法）
+    // 新增：辅助方法（打印阶段名称，更清晰，不影响玩法）
     private string GetStageName(int stage)
     {
         return stage switch
@@ -298,7 +260,6 @@ public void TryPlantCrop(Vector3Int cellPos, FarmlandTiles farmland)
         {
             Destroy(cropInstances[id]);
             cropInstances.Remove(id);
-            Debug.Log($"🗑️ 清理无效实例：ID={id}");
         }
     }
 
@@ -306,11 +267,10 @@ public void TryPlantCrop(Vector3Int cellPos, FarmlandTiles farmland)
     // 新一天处理逻辑（核心：同步生长阶段到数据库）
     private void OnNewDay()
     {
-        Debug.Log("\n===== 新一天生长检查 =====");
         var allFarmlands = dbManager.GetAllFarmlands();
         var prevWatered = allFarmlands.ToDictionary(f => f.Id, f => f.IsWatered);
 
-        // 🔥 新增：先清空所有浇水图标（可视化同步）
+        //  新增：先清空所有浇水图标（可视化同步）
         if (farmlandManager != null && farmlandManager.statusIconTilemap != null)
         {
             BoundsInt bounds = farmlandManager.statusIconTilemap.cellBounds;
@@ -318,7 +278,6 @@ public void TryPlantCrop(Vector3Int cellPos, FarmlandTiles farmland)
             {
                 farmlandManager.statusIconTilemap.SetTile(cellPos, null);
             }
-            Debug.Log("💧 所有浇水图标已清空（可视化同步）");
         }
 
         // 重置浇水状态
@@ -341,7 +300,7 @@ public void TryPlantCrop(Vector3Int cellPos, FarmlandTiles farmland)
                 continue;
             }
 
-            // 🔥 新增：成熟阶段（2）不再生长，避免重复生成
+            // 新增：成熟阶段（2）不再生长，避免重复生成
             if (crop.GrowthStage == 2)
             {
                 Debug.Log($"🌿 作物{crop.Id}已成熟，停止生长");
@@ -366,12 +325,12 @@ public void TryPlantCrop(Vector3Int cellPos, FarmlandTiles farmland)
             // 阶段变化 → 切换预制体
             if (crop.GrowthStage != oldStage)
             {
-                Debug.Log($"🌱 作物{crop.Id}阶段更新：{oldStage}→{crop.GrowthStage}，剩余天数：{crop.DaysRemaining}");
+                Debug.Log($" 作物{crop.Id}阶段更新：{oldStage}→{crop.GrowthStage}，剩余天数：{crop.DaysRemaining}");
                 UpdateCropPrefab(crop);
             }
             else
             {
-                Debug.Log($"📌 作物{crop.Id}阶段未变：{crop.GrowthStage}，剩余天数：{crop.DaysRemaining}");
+                Debug.Log($" 作物{crop.Id}阶段未变：{crop.GrowthStage}，剩余天数：{crop.DaysRemaining}");
             }
         }
     }
@@ -383,14 +342,14 @@ public void TryPlantCrop(Vector3Int cellPos, FarmlandTiles farmland)
         FarmlandTiles farmland = dbManager.GetFarmlandById(crop.FarmlandId);
         if (config == null || farmland == null) return;
 
-        // 🔥 强制清理旧实例（确保无残留）
+        //  强制清理旧实例（确保无残留）
         if (cropInstances.TryGetValue(crop.Id, out GameObject oldInst))
         {
             Destroy(oldInst);
             cropInstances.Remove(crop.Id);
         }
 
-        // 🔥 额外检查：清理该格子上的所有其他作物实例（防止重复）
+        //  额外检查：清理该格子上的所有其他作物实例（防止重复）
         Vector3Int cellPos = new Vector3Int(farmland.TileX, farmland.TileY, 0);
         Vector3 spawnPos = farmlandTilemap.CellToWorld(cellPos) + new Vector3(0.5f, 0.5f, 0);
         foreach (var kvp in cropInstances)
@@ -417,16 +376,14 @@ public void TryPlantCrop(Vector3Int cellPos, FarmlandTiles farmland)
         newInst.transform.localScale = Vector3.one;
         cropInstances[crop.Id] = newInst;
 
-        // 🔥 核心修改：成熟作物自动挂载采集脚本
+        //  核心修改：成熟作物自动挂载采集脚本
         if (crop.GrowthStage == 2)
         {
             AddCropCollectScript(crop, newInst);
         }
-
-        Debug.Log($"🔄 作物{crop.Id}预制体切换为：{prefab.name}");
     }
 
-    // 🔥 新增：给成熟作物挂载采集脚本并配置参数
+    //  新增：给成熟作物挂载采集脚本并配置参数
     private void AddCropCollectScript(CropsStatus crop, GameObject cropInst)
     {
         // 避免重复挂载
@@ -454,11 +411,9 @@ public void TryPlantCrop(Vector3Int cellPos, FarmlandTiles farmland)
             12 => CropMatureDays.TwelveDays,
             _ => CropMatureDays.ThreeDays
         };
-
-        Debug.Log($"📎 作物{crop.Id}（{crop.CropType}）已挂载采集脚本，成熟天数：{matureDays}");
     }
 
-    // 🔥 新增：根据作物类型获取成熟天数（从配置读取）
+    //  新增：根据作物类型获取成熟天数（从配置读取）
     private int GetCropMatureDays(string cropType)
     {
         CropConfig config = cropConfigs.FirstOrDefault(c => c.cropType == cropType);

@@ -19,17 +19,16 @@ public class FarmlandVisualizer : MonoBehaviour
     /// </summary>
     public void UpdateFarmlandVisual(FarmlandTiles farmland)
     {
-        Debug.Log($"🔍 【视觉更新】处理耕地：坐标({farmland.TileX},{farmland.TileY})，状态：{(farmland.IsCultivated ? "已开垦" : "未开垦")}");
 
         // 基础校验
         if (farmlandTilemap == null || farmland == null)
         {
-            Debug.LogError("❌ 【视觉更新】farmlandTilemap或farmland为空，无法更新");
+            Debug.LogError(" 【视觉更新】farmlandTilemap或farmland为空，无法更新");
             return;
         }
         if (cultivatedTile == null)
         {
-            Debug.LogError("❌ 【视觉更新】未拖入【已耕地Tile】，请在Inspector中配置！");
+            Debug.LogError(" 【视觉更新】未拖入【已耕地Tile】，请在Inspector中配置！");
             return;
         }
 
@@ -38,8 +37,6 @@ public class FarmlandVisualizer : MonoBehaviour
         farmlandTilemap.SetTile(cellPos, null);
         farmlandTilemap.SetTile(cellPos, farmland.IsCultivated ? cultivatedTile : null);
         farmlandTilemap.RefreshTile(cellPos); // 强制刷新Tilemap
-
-        Debug.Log($"✅ 【视觉更新】耕地({farmland.TileX},{farmland.TileY})视觉切换完成！");
     }
 
     /// <summary>

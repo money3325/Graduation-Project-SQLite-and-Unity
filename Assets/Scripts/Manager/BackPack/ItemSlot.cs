@@ -46,7 +46,6 @@ public class ItemSlot : MonoBehaviour, IPointerClickHandler
     /// </summary>
     public void SetSlot(string itemType, int count)
     {
-        Debug.Log($"🔍 【ItemSlot】{gameObject.name} 填充物品：{itemType}，数量：{count}");
         currentItemType = itemType;
         currentItemCount = count;
 
@@ -60,7 +59,6 @@ public class ItemSlot : MonoBehaviour, IPointerClickHandler
         else
         {
             itemIcon.enabled = false; // 无图标则隐藏
-            Debug.LogWarning($"⚠️ 物品{itemType}未配置图标");
         }
 
         // 2. 判断是否可用（工具永久可用，种子/作物数量>0可用）

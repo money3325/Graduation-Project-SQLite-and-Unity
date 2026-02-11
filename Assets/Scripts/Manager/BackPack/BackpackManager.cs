@@ -74,8 +74,6 @@ public class BackpackManager : MonoBehaviour
         // 填充工具（数量1，无消耗）
         DBManager.Instance.AddItem("WateringCan", 1);
         DBManager.Instance.AddItem("Hoe", 1);
-
-        Debug.Log("✅ 初始背包物品填充完成：3种种子（各5个）+ 浇水壶 + 锄头");
     }
 
     /// <summary>
@@ -87,7 +85,6 @@ public class BackpackManager : MonoBehaviour
 
         if (DBManager.Instance == null)
         {
-            Debug.LogError("❌ 【背包】DBManager.Instance为null，无法加载背包数据");
             return;
         }
 
@@ -97,7 +94,6 @@ public class BackpackManager : MonoBehaviour
             .ToList();
 
         currentBackpackItems.AddRange(items);
-        Debug.Log($"✅ 【背包】加载完成，共{currentBackpackItems.Count}个物品");
     }
 
     /// <summary>
@@ -133,16 +129,45 @@ public class BackpackManager : MonoBehaviour
     /// </summary>
     public void AddItem(string itemType, int count)
     {
-        Debug.Log($"🔍 【背包】开始添加物品：{itemType}，数量：{count}");
         if (DBManager.Instance == null)
         {
-            Debug.LogError($"❌ 【背包】DBManager.Instance为null！");
             return;
         }
+
+        // 1. 先同步数据库添加物品
         DBManager.Instance.AddItem(itemType, count);
+
+        // 2. 核心：判断是否是任务关联物品，触发任务进度更新
+        TriggerTaskProgressByItem(itemType, count);
+
+        // 3. 加载数据+刷新UI
         LoadBackpackItems();
         RefreshBackpackUI();
-        Debug.Log($"✅ 【背包】物品 {itemType} 添加完成，已刷新UI");
+    }
+
+    /// <summary>
+    /// 根据添加的物品，触发对应任务的进度更新
+    /// </summary>
+    private void TriggerTaskProgressByItem(string itemType, int count)
+    {
+        // 确保TaskManager实例存在
+        if (TaskManager.Instance == null)
+        {
+            return;
+        }
+
+        // 映射：物品类型 → 对应的任务名（可扩展更多任务）
+        var itemToTaskMap = new Dictionary<string, string>
+        {
+            {"Wheat", "收获小麦"}, // 小麦对应“收获小麦”任务
+            // 可添加其他任务映射，比如：{"Tomato", "收获番茄"}
+        };
+
+        // 如果当前物品是任务关联物品，更新对应任务进度
+        if (itemToTaskMap.TryGetValue(itemType, out string taskName))
+        {
+            TaskManager.Instance.UpdateProgress(taskName, count);
+        }
     }
 
    
@@ -155,7 +180,6 @@ public class BackpackManager : MonoBehaviour
         var targetItem = currentBackpackItems.FirstOrDefault(item => item.ItemType == itemType);
         if (targetItem == null)
         {
-            Debug.LogWarning($"⚠️ 背包中无{itemType}，无法消耗");
             return;
         }
 
@@ -165,7 +189,6 @@ public class BackpackManager : MonoBehaviour
         {
             // 3. 数量≤0，直接从数据库删除该物品（背包中不再显示）
             DBManager.Instance.DeleteBackpackItem(itemType);
-            Debug.Log($"✅ 物品{itemType}已耗尽，从背包中移除");
         }
         else
         {
@@ -189,7 +212,6 @@ public class BackpackManager : MonoBehaviour
             currentSelectedSlot = null;
             currentSelectedItemType = null;
             currentMode = BackpackMode.None;
-            Debug.Log("✅ 取消物品选中，退出所有功能模式");
             return;
         }
 
@@ -227,19 +249,16 @@ public class BackpackManager : MonoBehaviour
             currentMode = BackpackMode.Plant;
             // 通知CropManager选中对应种子
             CropManager.Instance.SelectSeed(itemType.Replace("_Seed", ""));
-            Debug.Log($"✅ 进入播种模式，选中种子：{itemType}");
         }
         // 锄头→耕地模式
         else if (itemType == "Hoe")
         {
             currentMode = BackpackMode.Cultivate;
-            Debug.Log("✅ 进入耕地模式，可点击未耕地进行耕地");
         }
         // 浇水壶→浇水模式
         else if (itemType == "WateringCan")
         {
             currentMode = BackpackMode.Water;
-            Debug.Log("✅ 进入浇水模式，可点击作物进行浇水");
         }
         // 其他→无模式
         else
@@ -261,6 +280,5 @@ public class BackpackManager : MonoBehaviour
         currentSelectedItemType = null;
         currentMode = BackpackMode.None;
         CropManager.Instance.isSinglePlantMode = false; // 退出播种模式
-        Debug.Log("✅ 强制退出所有功能模式");
     }
 }
